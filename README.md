@@ -20,6 +20,10 @@ GitHub Pagesで動作する、レスポンシブ対応の番組表Webアプリ�
 本番環境に影響を与えずに、任意の時間にジャンプしたり時間の進みを早くしたりして、UIの挙動（ON AIRの切り替わり等）をテストできます。
 
 *   **使い方**: アプリのURLの末尾に `#debug` または `?debug=true` を付けてアクセスします。
-    *   例: `https://[あなたのGitHubユーザー名].github.io/[リポジトリ名]/#debug`
+    *   例: `https://kawarawari-shokunin.github.io/gakusai-timetable/#debug`
 *   右下に「🛠 デバッグツール」パネルが表示されます。
 *   「開始時刻」を入力し、「30倍速で進める」にチェックを入れて「適用」を押すと、指定した時間から高速でアプリ内の時計が進みます。
+
+## 利用方法
+以下のアドレスにアクセスします。
+https://kawarawari-shokunin.github.io/gakusai-timetable/
