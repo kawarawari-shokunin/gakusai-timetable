@@ -1,55 +1,122 @@
 // --- 設定・状態管理 ---
-let currentDayId = "day1"; // 現在選択されているタブ
-let currentTag = "all";    // 現在選択されているタグ
-let availableTags = new Set(); // 抽出したタグの一覧
-let isInitialLoad = true;  // 初回読み込みフラグ（自動スクロール用）
+let scheduleData = [];
+let currentDayId = "";
+let currentTag = "all";
+let availableTags = new Set();
+let isInitialLoad = true;
+let showDayEndedMessage = false;
 
-// ★現在時刻テスト用オーバーライド
-// 本番時は空文字列("")にしてください。
-// 例: "2026-10-24T12:15:00+09:00" と入れると、10/24 12時台の挙動をテストできます。
-const DEBUG_NOW = "2026-10-23T11:45:00+09:00"; 
+// ★テスト用現在時刻（本番環境では空文字列 "" にしてください）
+// 例: "2026-10-23T11:45:00+09:00"（11:30終了の次が12:00開始の場合の準備中テスト等）
+const DEBUG_NOW = ""; 
 
-// --- 初期化処理 ---
-document.addEventListener("DOMContentLoaded", () => {
-    extractTags();       // data.jsからタグを収集
-    renderTabs();        // タブUIの生成
-    renderTagFilters();  // タグボタンUIの生成
-    
-    // アクセス日時に基づいて初期タブを決定
-    determineInitialTab(); 
-    
-    // 描画
-    renderSchedule();
-});
-
-// 現在時刻を取得する関数
 function getNow() {
     return DEBUG_NOW ? new Date(DEBUG_NOW) : new Date();
 }
 
+// --- 初期化処理 ---
+document.addEventListener("DOMContentLoaded", () => {
+    fetch('data.json')
+        .then(response => {
+            if (!response.ok) throw new Error("データの読み込みに失敗しました");
+            return response.json();
+        })
+        .then(data => {
+            scheduleData = data;
+            if(scheduleData.length > 0) {
+                currentDayId = scheduleData[0].dateId; 
+                extractTags();
+                determineInitialTab(); 
+                
+                renderTabs();
+                renderTagFilters();
+                renderSchedule();
+
+                // 1分ごとに現在時刻と番組の進行状況をチェック
+                setInterval(checkScheduleProgress, 60000);
+            }
+        })
+        .catch(error => {
+            document.getElementById("timeline-container").innerHTML = `<div class="empty-message">番組表データを読み込めませんでした。</div>`;
+            console.error(error);
+        });
+});
+
 // データの全番組からタグを自動抽出
 function extractTags() {
+    availableTags.clear();
     scheduleData.forEach(day => {
         day.programs.forEach(program => {
-            if (program.tags) {
-                program.tags.forEach(tag => availableTags.add(tag));
+            let tagsArray = [];
+            if (Array.isArray(program.tags)) {
+                tagsArray = program.tags;
+            } else if (typeof program.tags === 'string') {
+                tagsArray = program.tags.split(',').map(t => t.trim()).filter(t => t);
             }
+            program.tags = tagsArray;
+            tagsArray.forEach(tag => availableTags.add(tag));
         });
     });
 }
 
-// 初期表示する日付タブを現在時刻から判定
+// 初期表示する日付タブを判定し、終了していれば翌日へ遷移
 function determineInitialTab() {
     const now = getNow();
-    const todayString = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const todayString = now.toISOString().split('T')[0];
     
-    const matchedDay = scheduleData.find(day => day.dateString === todayString);
-    if (matchedDay) {
-        currentDayId = matchedDay.dateId;
+    let matchedDayIndex = scheduleData.findIndex(day => day.dateString === todayString);
+    
+    if (matchedDayIndex !== -1) {
+        currentDayId = scheduleData[matchedDayIndex].dateId;
+        
+        const dayPrograms = scheduleData[matchedDayIndex].programs;
+        if (dayPrograms.length > 0) {
+            const lastProgram = dayPrograms[dayPrograms.length - 1];
+            const lastEndTime = new Date(lastProgram.endTime);
+            
+            if (now >= lastEndTime) {
+                if (matchedDayIndex < scheduleData.length - 1) {
+                    currentDayId = scheduleData[matchedDayIndex + 1].dateId;
+                    showDayEndedMessage = true;
+                }
+            }
+        }
     } else {
-        // 期間外のアクセスなら、とりあえず1日目を表示
         currentDayId = scheduleData[0].dateId; 
     }
+}
+
+// 定期実行：日跨ぎや番組切替が発生したかチェック
+function checkScheduleProgress() {
+    const now = getNow();
+    const currentIndex = scheduleData.findIndex(d => d.dateId === currentDayId);
+    if (currentIndex === -1) return;
+
+    const currentDayData = scheduleData[currentIndex];
+    
+    if (currentDayData.dateString === now.toISOString().split('T')[0]) {
+        const dayPrograms = currentDayData.programs;
+        if (dayPrograms.length > 0) {
+            const lastProgram = dayPrograms[dayPrograms.length - 1];
+            const lastEndTime = new Date(lastProgram.endTime);
+            
+            // 最後の番組が終わった瞬間に翌日へ遷移
+            if (now >= lastEndTime && currentIndex < scheduleData.length - 1) {
+                currentDayId = scheduleData[currentIndex + 1].dateId;
+                showDayEndedMessage = true;
+                isInitialLoad = true;
+                currentTag = "all";
+                
+                renderTabs();
+                renderTagFilters();
+                renderSchedule();
+                return;
+            }
+        }
+    }
+    
+    // 定期チェックでON AIR/準備中表示を更新（スクロールはさせない）
+    renderSchedule(false);
 }
 
 // タブUIの生成
@@ -71,14 +138,12 @@ function renderTagFilters() {
     const container = document.getElementById("filters-container");
     container.innerHTML = "";
     
-    // 「すべて表示」ボタン
     const allBtn = document.createElement("button");
     allBtn.className = `filter-btn ${currentTag === "all" ? "active" : ""}`;
     allBtn.textContent = "すべて表示";
     allBtn.onclick = () => handleTagClick("all");
     container.appendChild(allBtn);
     
-    // 各タグのボタン
     Array.from(availableTags).sort().forEach(tag => {
         const btn = document.createElement("button");
         btn.className = `filter-btn ${currentTag === tag ? "active" : ""}`;
@@ -92,7 +157,8 @@ function renderTagFilters() {
 function handleTabClick(dateId) {
     if (currentDayId === dateId) return;
     currentDayId = dateId;
-    isInitialLoad = false; // 手動切替時はスクロールしない
+    isInitialLoad = false;
+    showDayEndedMessage = false;
     
     renderTabs();
     renderSchedule();
@@ -102,24 +168,39 @@ function handleTabClick(dateId) {
 function handleTagClick(tag) {
     if (currentTag === tag) return;
     currentTag = tag;
-    isInitialLoad = false; // タグ切替時はスクロールしない
+    isInitialLoad = false;
     
     renderTagFilters();
     renderSchedule();
 }
 
 // 番組表の描画
-function renderSchedule() {
+function renderSchedule(autoScroll = isInitialLoad) {
+    const msgContainer = document.getElementById("message-container");
     const container = document.getElementById("timeline-container");
     container.innerHTML = "";
     
+    if (showDayEndedMessage) {
+        msgContainer.innerHTML = `<div class="system-message">本日の番組は終了しました。翌日の番組表を表示しています。</div>`;
+        showDayEndedMessage = false;
+    } else {
+        msgContainer.innerHTML = "";
+    }
+
     const dayData = scheduleData.find(d => d.dateId === currentDayId);
     if (!dayData) return;
     
     const now = getNow();
-    let currentProgramFound = false;
+    let currentOrNextFound = false;
+    let isCurrentlyOnAir = false;
 
-    // フィルタリング処理
+    // 現在ON AIR中の番組があるかチェック
+    if (dayData.dateString === now.toISOString().split('T')[0]) {
+        isCurrentlyOnAir = dayData.programs.some(p => {
+            return now >= new Date(p.startTime) && now < new Date(p.endTime);
+        });
+    }
+
     const filteredPrograms = dayData.programs.filter(p => {
         if (currentTag === "all") return true;
         return p.tags && p.tags.includes(currentTag);
@@ -130,39 +211,66 @@ function renderSchedule() {
         return;
     }
 
-    filteredPrograms.forEach((program, index) => {
-        const progStart = new Date(program.startTime);
-        
-        // 次の番組の開始時間を終了時間と仮定する（最後の場合は+1時間）
-        let progEnd = new Date(progStart.getTime() + 60 * 60 * 1000); 
-        if (index < filteredPrograms.length - 1) {
-            progEnd = new Date(filteredPrograms[index + 1].startTime);
-        }
+    let prepCardInserted = false;
 
-        // 現在進行中の番組かどうかの判定 (表示しているタブが今日の場合のみ)
+    filteredPrograms.forEach((program) => {
+        const progStart = new Date(program.startTime);
+        const progEnd = new Date(program.endTime); 
+
         let isCurrent = false;
+
+        // 今日のタブを見ている場合の判定
         if (dayData.dateString === now.toISOString().split('T')[0]) {
             if (now >= progStart && now < progEnd) {
                 isCurrent = true;
-                currentProgramFound = true;
+                currentOrNextFound = true;
+            } else if (!isCurrentlyOnAir && now < progStart && !prepCardInserted) {
+                // 放送中の番組がなく、時間が未来の最初の番組の「直前」に準備中カードを挿入
+                const prepCard = document.createElement("div");
+                prepCard.className = "prep-card";
+                prepCard.id = "target-program"; // 自動スクロールのターゲット
+                
+                prepCard.innerHTML = `
+                    <div class="prep-card-content">
+                        <div class="prep-card-title">⏳ 現在、ステージ準備中です</div>
+                        <div class="prep-card-next">
+                            次回は <strong>${program.time}</strong> より<br>
+                            <strong>「${program.title}」</strong> をお届けします！
+                        </div>
+                    </div>
+                `;
+                container.appendChild(prepCard);
+                prepCardInserted = true;
+                currentOrNextFound = true;
             }
         }
 
-        // カード要素の作成
+        // 通常の番組カードを作成
         const card = document.createElement("div");
         card.className = `program-card ${isCurrent ? "is-current" : ""}`;
         
+        // 準備中がない場合、現在放送中のカードをスクロールターゲットにする
+        if (isCurrent) {
+            card.id = "target-program";
+        }
+        
         let tagsHtml = "";
-        if (program.tags) {
+        if (program.tags && program.tags.length > 0) {
             tagsHtml = `<div class="tags">
                 ${program.tags.map(t => `<span class="tag">${t}</span>`).join("")}
             </div>`;
+        }
+
+        let subtitleHtml = "";
+        if (program.subtitle) {
+            subtitleHtml = `<div class="subtitle">${program.subtitle}</div>`;
         }
 
         card.innerHTML = `
             ${isCurrent ? '<div class="current-badge">ON AIR</div>' : ''}
             <div class="time">${program.time}</div>
             <div class="title">${program.title}</div>
+            ${subtitleHtml}
             <div class="description">${program.description}</div>
             ${tagsHtml}
         `;
@@ -170,13 +278,15 @@ function renderSchedule() {
         container.appendChild(card);
     });
 
-    // 初回読み込み時に現在進行中の番組があれば自動スクロール
-    if (isInitialLoad && currentProgramFound) {
+    // 初回表示時のみ、ON AIR または 準備中 の位置にスクロール
+    if (autoScroll && currentOrNextFound) {
         setTimeout(() => {
-            const currentEl = document.querySelector('.is-current');
-            if (currentEl) {
-                currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const targetEl = document.getElementById('target-program');
+            if (targetEl) {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-        }, 100); // 描画完了を少し待つ
+        }, 100);
     }
+    
+    isInitialLoad = false;
 }
