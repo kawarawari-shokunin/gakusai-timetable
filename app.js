@@ -6,16 +6,75 @@ let availableTags = new Set();
 let isInitialLoad = true;
 let showDayEndedMessage = false;
 
-// ★テスト用現在時刻（本番環境では空文字列 "" にしてください）
-// 例: "2026-10-23T11:45:00+09:00"（11:30終了の次が12:00開始の場合の準備中テスト等）
-const DEBUG_NOW = ""; 
+// --- デバッグ（時間操作）機能 ---
+let timeMultiplier = 1;
+let virtualEpoch = null;
+let realEpoch = null;
 
 function getNow() {
-    return DEBUG_NOW ? new Date(DEBUG_NOW) : new Date();
+    if (!virtualEpoch || !realEpoch) {
+        return new Date();
+    }
+    const realElapsed = Date.now() - realEpoch;
+    return new Date(virtualEpoch + realElapsed * timeMultiplier);
+}
+
+function initDebugTool() {
+    const debugPanel = document.getElementById("debug-panel");
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasDebugHash = window.location.hash === '#debug';
+    
+    // URLに ?debug=true または #debug がある場合のみ有効化
+    if (urlParams.get('debug') === 'true' || hasDebugHash) {
+        debugPanel.classList.add("active");
+    } else {
+        return; // 無効な場合は処理しない
+    }
+
+    const timeInput = document.getElementById("debug-time");
+    const speedCheck = document.getElementById("debug-speed");
+    const applyBtn = document.getElementById("debug-apply");
+    const resetBtn = document.getElementById("debug-reset");
+    const display = document.getElementById("debug-now-display");
+
+    setInterval(() => {
+        const now = getNow();
+        display.innerHTML = `${now.toLocaleDateString("ja-JP")} <br> ${now.toLocaleTimeString("ja-JP")}`;
+    }, 100);
+
+    applyBtn.addEventListener("click", () => {
+        if (timeInput.value) {
+            virtualEpoch = new Date(timeInput.value).getTime();
+        } else {
+            virtualEpoch = Date.now();
+        }
+        realEpoch = Date.now();
+        timeMultiplier = speedCheck.checked ? 30 : 1;
+
+        isInitialLoad = true;
+        determineInitialTab();
+        renderTabs();
+        renderSchedule(true);
+    });
+
+    resetBtn.addEventListener("click", () => {
+        virtualEpoch = null;
+        realEpoch = null;
+        timeMultiplier = 1;
+        timeInput.value = "";
+        speedCheck.checked = false;
+
+        isInitialLoad = true;
+        determineInitialTab();
+        renderTabs();
+        renderSchedule(true);
+    });
 }
 
 // --- 初期化処理 ---
 document.addEventListener("DOMContentLoaded", () => {
+    initDebugTool();
+
     fetch('data.json')
         .then(response => {
             if (!response.ok) throw new Error("データの読み込みに失敗しました");
@@ -32,8 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderTagFilters();
                 renderSchedule();
 
-                // 1分ごとに現在時刻と番組の進行状況をチェック
-                setInterval(checkScheduleProgress, 60000);
+                setInterval(checkScheduleProgress, 1000);
             }
         })
         .catch(error => {
@@ -42,7 +100,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 });
 
-// データの全番組からタグを自動抽出
 function extractTags() {
     availableTags.clear();
     scheduleData.forEach(day => {
@@ -59,10 +116,11 @@ function extractTags() {
     });
 }
 
-// 初期表示する日付タブを判定し、終了していれば翌日へ遷移
 function determineInitialTab() {
     const now = getNow();
-    const todayString = now.toISOString().split('T')[0];
+    // JSTの YYYY-MM-DD を取得するためパース
+    const nowJst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const todayString = nowJst.toISOString().split('T')[0];
     
     let matchedDayIndex = scheduleData.findIndex(day => day.dateString === todayString);
     
@@ -86,21 +144,21 @@ function determineInitialTab() {
     }
 }
 
-// 定期実行：日跨ぎや番組切替が発生したかチェック
 function checkScheduleProgress() {
     const now = getNow();
     const currentIndex = scheduleData.findIndex(d => d.dateId === currentDayId);
     if (currentIndex === -1) return;
 
     const currentDayData = scheduleData[currentIndex];
+    const nowJst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const todayString = nowJst.toISOString().split('T')[0];
     
-    if (currentDayData.dateString === now.toISOString().split('T')[0]) {
+    if (currentDayData.dateString === todayString) {
         const dayPrograms = currentDayData.programs;
         if (dayPrograms.length > 0) {
             const lastProgram = dayPrograms[dayPrograms.length - 1];
             const lastEndTime = new Date(lastProgram.endTime);
             
-            // 最後の番組が終わった瞬間に翌日へ遷移
             if (now >= lastEndTime && currentIndex < scheduleData.length - 1) {
                 currentDayId = scheduleData[currentIndex + 1].dateId;
                 showDayEndedMessage = true;
@@ -114,12 +172,9 @@ function checkScheduleProgress() {
             }
         }
     }
-    
-    // 定期チェックでON AIR/準備中表示を更新（スクロールはさせない）
     renderSchedule(false);
 }
 
-// タブUIの生成
 function renderTabs() {
     const container = document.getElementById("tabs-container");
     container.innerHTML = "";
@@ -133,7 +188,6 @@ function renderTabs() {
     });
 }
 
-// タグフィルターUIの生成
 function renderTagFilters() {
     const container = document.getElementById("filters-container");
     container.innerHTML = "";
@@ -153,7 +207,6 @@ function renderTagFilters() {
     });
 }
 
-// タブのクリック処理
 function handleTabClick(dateId) {
     if (currentDayId === dateId) return;
     currentDayId = dateId;
@@ -164,7 +217,6 @@ function handleTabClick(dateId) {
     renderSchedule();
 }
 
-// タグのクリック処理
 function handleTagClick(tag) {
     if (currentTag === tag) return;
     currentTag = tag;
@@ -174,7 +226,6 @@ function handleTagClick(tag) {
     renderSchedule();
 }
 
-// 番組表の描画
 function renderSchedule(autoScroll = isInitialLoad) {
     const msgContainer = document.getElementById("message-container");
     const container = document.getElementById("timeline-container");
@@ -191,11 +242,13 @@ function renderSchedule(autoScroll = isInitialLoad) {
     if (!dayData) return;
     
     const now = getNow();
+    const nowJst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const todayString = nowJst.toISOString().split('T')[0];
+    
     let currentOrNextFound = false;
     let isCurrentlyOnAir = false;
 
-    // 現在ON AIR中の番組があるかチェック
-    if (dayData.dateString === now.toISOString().split('T')[0]) {
+    if (dayData.dateString === todayString) {
         isCurrentlyOnAir = dayData.programs.some(p => {
             return now >= new Date(p.startTime) && now < new Date(p.endTime);
         });
@@ -219,16 +272,14 @@ function renderSchedule(autoScroll = isInitialLoad) {
 
         let isCurrent = false;
 
-        // 今日のタブを見ている場合の判定
-        if (dayData.dateString === now.toISOString().split('T')[0]) {
+        if (dayData.dateString === todayString) {
             if (now >= progStart && now < progEnd) {
                 isCurrent = true;
                 currentOrNextFound = true;
             } else if (!isCurrentlyOnAir && now < progStart && !prepCardInserted) {
-                // 放送中の番組がなく、時間が未来の最初の番組の「直前」に準備中カードを挿入
                 const prepCard = document.createElement("div");
                 prepCard.className = "prep-card";
-                prepCard.id = "target-program"; // 自動スクロールのターゲット
+                prepCard.id = "target-program"; 
                 
                 prepCard.innerHTML = `
                     <div class="prep-card-content">
@@ -245,11 +296,9 @@ function renderSchedule(autoScroll = isInitialLoad) {
             }
         }
 
-        // 通常の番組カードを作成
         const card = document.createElement("div");
         card.className = `program-card ${isCurrent ? "is-current" : ""}`;
         
-        // 準備中がない場合、現在放送中のカードをスクロールターゲットにする
         if (isCurrent) {
             card.id = "target-program";
         }
@@ -262,7 +311,7 @@ function renderSchedule(autoScroll = isInitialLoad) {
         }
 
         let subtitleHtml = "";
-        if (program.subtitle) {
+        if (program.subtitle && program.subtitle !== "nan" && program.subtitle.trim() !== "") {
             subtitleHtml = `<div class="subtitle">${program.subtitle}</div>`;
         }
 
@@ -278,7 +327,6 @@ function renderSchedule(autoScroll = isInitialLoad) {
         container.appendChild(card);
     });
 
-    // 初回表示時のみ、ON AIR または 準備中 の位置にスクロール
     if (autoScroll && currentOrNextFound) {
         setTimeout(() => {
             const targetEl = document.getElementById('target-program');
