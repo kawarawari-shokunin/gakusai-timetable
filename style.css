@@ -43,12 +43,12 @@ header p {
 }
 
 main {
-    max-width: 600px; /* スマートフォン〜タブレットを意識した幅 */
+    max-width: 600px;
     margin: 0 auto;
     padding: 1rem;
 }
 
-/* タブ */
+/* タブ切り替え */
 .tabs {
     display: flex;
     background: var(--card-bg);
@@ -75,7 +75,7 @@ main {
     color: white;
 }
 
-/* フィルター (タグ) */
+/* タグフィルター */
 .filters {
     display: flex;
     flex-wrap: wrap;
@@ -100,7 +100,20 @@ main {
     border-color: var(--primary-color);
 }
 
-/* タイムライン (番組表) */
+/* システムメッセージ（日跨ぎ案内など） */
+.system-message {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 0.8rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: bold;
+    border: 1px solid #ffeeba;
+}
+
+/* タイムライン本体 */
 .timeline {
     position: relative;
     padding-left: 1rem;
@@ -118,6 +131,7 @@ main {
     z-index: 1;
 }
 
+/* 通常の番組カード */
 .program-card {
     position: relative;
     background: var(--card-bg);
@@ -144,7 +158,7 @@ main {
     z-index: 2;
 }
 
-/* 現在進行中の番組のハイライト */
+/* 放送中(ON AIR)のカード装飾 */
 .program-card.is-current {
     border-left: 4px solid #e74c3c;
     background-color: #fffaf9;
@@ -166,6 +180,55 @@ main {
     font-weight: bold;
 }
 
+/* 準備中（独立カード）のデザイン */
+.prep-card {
+    position: relative;
+    background: #fdfbf7;
+    border: 2px dashed #f39c12;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    margin-left: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    z-index: 2;
+}
+
+.prep-card::before {
+    content: '';
+    position: absolute;
+    top: 1.2rem;
+    left: -1.95rem;
+    width: 12px;
+    height: 12px;
+    background: #fdfbf7;
+    border-radius: 50%;
+    border: 3px solid #f39c12;
+    z-index: 2;
+}
+
+.prep-card-content {
+    text-align: center;
+}
+
+.prep-card-title {
+    color: #d35400;
+    font-weight: bold;
+    font-size: 1.05rem;
+    margin-bottom: 0.5rem;
+}
+
+.prep-card-next {
+    color: #333;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.prep-card-next strong {
+    color: #c0392b;
+    font-size: 1rem;
+}
+
+/* 番組テキストのスタイル */
 .time {
     font-weight: bold;
     color: var(--accent-color);
@@ -176,8 +239,15 @@ main {
 .title {
     font-size: 1.1rem;
     font-weight: bold;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.2rem;
     line-height: 1.3;
+}
+
+.subtitle {
+    font-size: 0.95rem;
+    color: var(--primary-color);
+    font-weight: bold;
+    margin-bottom: 0.5rem;
 }
 
 .description {
