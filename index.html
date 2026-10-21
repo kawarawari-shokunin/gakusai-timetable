@@ -14,23 +14,19 @@
 
     <main>
         <!-- 日付切り替えタブ -->
-        <nav class="tabs" id="tabs-container">
-            <!-- app.jsから動的に生成されます -->
-        </nav>
+        <nav class="tabs" id="tabs-container"></nav>
 
         <!-- タグフィルター -->
-        <div class="filters" id="filters-container">
-            <!-- app.jsから動的に生成されます -->
-        </div>
+        <div class="filters" id="filters-container"></div>
+
+        <!-- システムメッセージ表示エリア（日跨ぎ時など） -->
+        <div id="message-container"></div>
 
         <!-- 番組表タイムライン -->
-        <div class="timeline" id="timeline-container">
-            <!-- app.jsから動的に生成されます -->
-        </div>
+        <div class="timeline" id="timeline-container"></div>
     </main>
 
-    <!-- スクリプトの読み込み（順番が重要です） -->
-    <script src="data.js"></script>
+    <!-- アプリケーションロジック -->
     <script src="app.js"></script>
 </body>
 </html>
