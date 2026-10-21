@@ -26,6 +26,25 @@
         <div class="timeline" id="timeline-container"></div>
     </main>
 
+    <!-- デバッグ用パネル（URLに #debug をつけた時のみ表示されます） -->
+    <div id="debug-panel" class="debug-panel">
+        <div class="debug-header">🛠 デバッグツール</div>
+        <div class="debug-content">
+            <div class="debug-row">
+                <label>開始時刻:</label>
+                <input type="datetime-local" id="debug-time">
+            </div>
+            <div class="debug-row">
+                <label><input type="checkbox" id="debug-speed"> 30倍速で進める</label>
+            </div>
+            <div class="debug-actions">
+                <button id="debug-apply" class="debug-btn">適用</button>
+                <button id="debug-reset" class="debug-btn reset">リセット</button>
+            </div>
+            <div class="debug-now">仮想現在時刻: <br><span id="debug-now-display">--</span></div>
+        </div>
+    </div>
+
     <!-- アプリケーションロジック -->
     <script src="app.js"></script>
 </body>
